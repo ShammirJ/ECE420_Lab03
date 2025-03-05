@@ -1,77 +1,80 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <omp.h>
+#include <math.h>
 #include "timer.h"
 #include "Lab3IO.h"
 
-// Implementation of Algorithm 1 from Lab Manual
-void GuassianElimination(double **U, int size){
-    int i,j,k;
+double **A, *x;
+int n;
+
+/* Perform Gaussian Elimination using Algorithm 1 from Lab Manual
+ * 
+ * Para: G -> The intial G matrix = {A|b}
+ */
+void GuassianElimination(double **G){
+    int i, j, k;
     double temp;
 
-    for (k = 0; k < size - 1; ++k) {
+    for (k = 0; k < n - 1; k++) {
+        
         // Partial pivoting
         int max_row = k;
-        double max_val = U[k][k];
+        double max_val = fabs(G[k][k]);
 
-        #pragma omp parallel for reduction(max:max_val)
-        for (i = k + 1; i < size; ++i) {
-            if (abs(U[i][k]) > abs(max_val)) {
-                max_val = U[i][k];
-                max_row = i;
+        #pragma omp parallel for private(temp)
+        for (i = k + 1; i < n; i++) {
+            if ((temp = fabs(G[i][k])) > max_val) {
+                
+                #pragma omp critical
+                if (temp > max_val) {
+                    max_val = temp;
+                    max_row = i;
+                }
             }
         }
 
         if (max_row != k) {
+            
             // Swap rows
             #pragma omp parallel for private(temp)
-            for (j = 0; j < size + 1; ++j) {
-                temp = U[k][j];
-                U[k][j] = U[max_row][j];
-                U[max_row][j] = temp;
+            for (j = 0; j < n + 1; j++) {
+                temp = G[k][j];
+                G[k][j] = G[max_row][j];
+                G[max_row][j] = temp;
             }
         }
 
         // Elimination
-        #pragma omp parallel for private(i, j, temp)
-        for (i = k + 1; i < size; ++i) {
-            temp = U[i][k] / U[k][k];
-            for (j = k; j < size + 1; ++j) {
-                U[i][j] -= temp * U[k][j];
+        #pragma omp parallel for private(j, temp)
+        for (i = k + 1; i < n; i++) {
+            temp = G[i][k] / G[k][k];
+            for (j = k; j < n + 1; j++) {
+                G[i][j] -= temp * G[k][j];
             }
         }
     }
-
 }
-// Implementation of Algorithm 2 from Lab Manual
-void JordanElimination(double **D, int size){
-    int i, k;
+/* Perform Jordan Elimination using Algorithm 2 from Lab Manual
+ *
+ * Para: U -> The output matrix from the Gaussian Elimination
+ */
+void JordanElimination(double **U){
+    int k;
 
-    for (k = size - 1; k >= 0; --k) {
-        // Normalize the current row
-        #pragma omp parallel for
-        for (i = 0; i < size + 1; ++i) {
-            D[k][i] /= D[k][k];
-        }
-
-        // Elimination
-        #pragma omp parallel for private(i)
-        for (i = 0; i < k; ++i) {
-            double factor = D[i][k];
-            for (int j = k; j < size + 1; ++j) {
-                D[i][j] -= factor * D[k][j];
-            }
+    #pragma omp parallel for
+    for (k = n - 1; k > 0; k--) {
+        for (int i = 0; i < k; i++) {
+            U[i][n] -= (U[i][k]/U[k][k]) * U[k][n];
+            U[i][k] = 0;
         }
     }
 }
 
 int main (int argc, char *argv[]){
-    double **A;
     double start, end;
-    double *x;
-    int size;
 
-    if (argc != 2){
+    if (argc != 2) {
         printf("Usage: %s <number of threads>\n", argv[0]);
         return 1;
     }
@@ -81,27 +84,30 @@ int main (int argc, char *argv[]){
     omp_set_num_threads(num_threads);
 
     // Load input data
-    Lab3LoadInput(&A, &size);
+    Lab3LoadInput(&A, &n);
 
-    x = CreateVec(size); // Allocate memory for the resulting vector
+    x = CreateVec(n); // Allocate memory for the resulting vector
 
     GET_TIME(start);
 
-    GuassianElimination(A, size);
-    JordanElimination(A, size);
-
+    GuassianElimination(A);
+    //PrintMat(A, n, n+1); // For debug
+    JordanElimination(A);
+    //printf("\n\n");
+    //PrintMat(A, n, n+1); // For debug
+    
     // Take the resulting vector from the reduced matrix
-    for (int i = 0; i< size; i++){
-        x[i]= A[i][size];
-    }
-
+    #pragma omp parallel for
+    for (int i = 0; i < n; i++)
+        x[i] = A[i][n] / A[i][i];
+    
     GET_TIME(end);
 
     // Save output
-    Lab3SaveOutput(x, size, end - start);
+    Lab3SaveOutput(x, n, end - start);
 
     // Free allocated memory
-    DestroyMat(A, size);
+    DestroyMat(A, n);
     DestroyVec(x);
     return 0;
 }

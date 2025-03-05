@@ -1,5 +1,5 @@
 # Compiler flags
-CFLAGS = -fopenmp -Wall -O2 -lm
+CFLAGS = -fopenmp -g -Wall -O2 -lm
 
 # Default target
 all: main datagen
@@ -23,6 +23,6 @@ datagen.o: datagen.c
 clean:
 	rm -f main.o Lab3IO.o datagen.o main datagen
 
-clean all:
+cleanall:
 	rm -f main.o Lab3IO.o datagen.o main datagen data_input data_output
 
