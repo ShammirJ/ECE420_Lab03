@@ -66,11 +66,16 @@ void JordanElimination(double **U) {
     #pragma omp parallel for schedule(guided)
     for (int k = n - 1; k > 0; k--) {
         for (int i = 0; i < k; i++) {
-            U[i][n] -= (U[i][k] / U[k][k]) * U[k][n];
+            double factor = U[i][k] / U[k][k];
+
+            #pragma omp atomic
+            U[i][n] -= factor * U[k][n];
+
             U[i][k] = 0;
         }
     }
 }
+
 
 int main (int argc, char *argv[]){
     double start, end;
