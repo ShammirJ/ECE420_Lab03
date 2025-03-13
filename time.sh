@@ -19,6 +19,7 @@ make cleanall
 make
 
 # Generate a matrix ONCE
+echo "Generating input data. This might take awhile..."
 ./datagen -s $ms
     if [ $? -ne 0 ]; then
         echo "Error: datagen failed!"
@@ -44,6 +45,12 @@ while [[ $ATTEMPT -ne 100 ]]; do
     ./serial
     if [ $? -ne 0 ]; then
         echo "Error: serial failed!"
+        exit 1
+    fi
+
+    ./guess $nt
+    if [ $? -ne 0 ]; then
+        echo "Error: guess failed!"
         exit 1
     fi
 

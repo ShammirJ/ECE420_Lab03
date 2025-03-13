@@ -1,7 +1,4 @@
-/* IMPORTANT: We have tried to parallelize Gaussian and Jordan elimination before, then we realized that parallel directives nested in the inner loop actually would slow the program down
- * due to thread creation overhead. Therefore, we decided that it would be best if Gaussian and Jordan elimination be executed in serial and only the updating to x part need to be
- * parallelized
- * 
+/*
  * Author: Dang Nguyen, Jose Shammir
  * Run as: ./main num_thread
  */
@@ -13,7 +10,7 @@
 #include "timer.h"
 #include "Lab3IO.h"
 
-#define DEBUG_MODE 0 // Enable/Disable Debug mode. Set this to 1 first to use either the .sh program for testing
+#define DEBUG_MODE 1  // Enable/Disable Debug mode. Set this to 1 first to use either the .sh program for testing
 
 double **A, *x;
 int n;
@@ -52,38 +49,56 @@ void PrintDebug(char *fout, char *tout, double time, int presult) {
  * Para: G -> The intial G matrix = {A|b}
  */
 void GuassianElimination(double **G) {
-    double temp;
+    double max_val;
+    int max_row;
 
+    #pragma omp parallel
     for (int k = 0; k < n - 1; k++) {
-        
-        // Partial pivoting
-        int max_row = k;
-        double max_val = fabs(G[k][k]);
+        #pragma omp single
+        {
+            max_val = fabs(G[k][k]);
+            max_row = k;
+        }
 
+        // Partial pivoting
+        int local_max_row = max_row;
+        double local_max_val = max_val;
+        double local_temp = 0;
+
+        #pragma omp for nowait
         for (int i = k + 1; i < n; i++) {
-            if ((temp = fabs(G[i][k])) > max_val) {
-                max_val = temp;
-                max_row = i;
+            if ((local_temp = fabs(G[i][k])) > local_max_val) {
+                local_max_val = local_temp;
+                local_max_row = i;
             }
         }
 
+        if (local_max_val > max_val) {
+            #pragma omp critical
+            if (local_max_val > max_val) {
+                max_val = local_max_val;
+                max_row = local_max_row;
+            }
+        }
+
+        #pragma omp barrier
         if (max_row != k) {
+            #pragma omp for
             for (int j = 0; j < n + 1; j++) {
-                temp = G[k][j];
+                local_temp = G[k][j];
                 G[k][j] = G[max_row][j];
-                G[max_row][j] = temp;
+                G[max_row][j] = local_temp;
             }
         }
 
         // Elimination
-        #pragma omp for private(temp)
+        #pragma omp for schedule(guided)
         for (int i = k + 1; i < n; i++) {
-            temp = G[i][k] / G[k][k];
+            local_temp = G[i][k] / G[k][k];
             for (int j = k; j < n + 1; j++) {
-                G[i][j] -= temp * G[k][j];
+                G[i][j] -= local_temp * G[k][j];
             }
         }
-
     }
 }
 
@@ -92,11 +107,34 @@ void GuassianElimination(double **G) {
  * Para: U -> The output matrix from the Gaussian Elimination
  */
 void JordanElimination(double **U) {
-    /* Multiple trials and errors show that Jordan elimination is best computed in series */
+    int enable_parallel = 0;
+
+    #pragma omp parallel
     for (int k = n - 1; k > 0; k--) {
-        for (int i = 0; i < k; i++) {
-            U[i][n] -= (U[i][k] / U[k][k]) * U[k][n];
-            U[i][k] = 0;
+        #pragma omp single
+        {
+            if ((n-k) >= omp_get_num_threads())
+                enable_parallel = 1;
+            else
+                enable_parallel = 0;
+        }
+
+        /* Only enable parallelism if the number of left over iteration >= number of thread
+         * to reduce overhead
+         */
+        if (enable_parallel) { 
+            #pragma omp for
+            for (int i = 0; i < k; i++) {
+                U[i][n] -= (U[i][k] / U[k][k]) * U[k][n];
+                U[i][k] = 0;
+            }
+        }
+        else {
+            #pragma omp single
+            for (int i = 0; i < k; i++) {
+                U[i][n] -= (U[i][k] / U[k][k]) * U[k][n];
+                U[i][k] = 0;
+            }
         }
     }
 }

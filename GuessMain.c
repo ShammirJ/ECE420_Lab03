@@ -1,5 +1,3 @@
-/* Other team code. DO NOT INCLUDE THIS FILE IN THE SUBMISSIN FOLDER */
-
 /*
 ECE420 Lab3: Solving a Linear System of Equations via Gauss-Jordan Elimination using OpenMP
 Lab Section: H21 (Group06)
@@ -88,7 +86,7 @@ int main(int argc, char *argv[]) {
     
     // Set the number of threads
     omp_set_num_threads(num_threads);
-    printf("Running with %d threads\n", num_threads);
+    //printf("Running with %d threads\n", num_threads);
 
     int n;
     double **A;
@@ -119,7 +117,7 @@ int main(int argc, char *argv[]) {
         printf("Error opening the output file.\n");
         return 1;
     }
-    if ((t = fopen("guess_time_output.txt","w")) == NULL){
+    if ((t = fopen("guess_time_output.txt","a")) == NULL){
         printf("Error opening the time output file.\n");
         return 1;
     }
@@ -127,7 +125,7 @@ int main(int argc, char *argv[]) {
     fprintf(op, "%d\n", n);
     for (i = 0; i < n; ++i)
         fprintf(op, "%e\t", x[i]);
-    fprintf(t, "%lf", Time);
+    fprintf(t, "%lf\n", Time);
     fclose(op);
     fclose(t);
     
