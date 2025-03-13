@@ -8,6 +8,35 @@
 double **A, *x;
 int n;
 
+/* Outputing the result and run time to 2 different files. Used for result verification and run time comparision 
+ *
+ * Para: fout -> File name for the output
+ *       tout -> File name for the time measurement
+ *       time -> End time result
+ */
+void PrintDebug(char *fout, char *tout, double time, int presult) {
+    FILE *op, *t;
+    int i;
+
+    if ((op = fopen(fout,"w")) == NULL){
+        printf("Error opening the output file.\n");
+        exit(1);
+    }
+    if ((t = fopen(tout,"a")) == NULL){
+        printf("Error opening the time output file.\n");
+        exit(1);
+    }
+
+    if (presult) {
+        fprintf(op, "%d\n", n);
+        for (i = 0; i < n; ++i)
+            fprintf(op, "%e\t", x[i]);
+    }
+    fprintf(t, "%lf\n", time);
+    fclose(op);
+    fclose(t);
+}
+
 void GuassianElimination(double **G) {
     double temp;
 
@@ -64,15 +93,6 @@ void JordanElimination(double **U) {
 int main (){
     double start, end;
 
-    // if (argc != 2) {
-    //     printf("Usage: %s <number of threads>\n", argv[0]);
-    //     return 1;
-    // }
-
-    // // Initialize the number of threads for OMP to use
-    // int num_threads = atoi(argv[1]);
-    // omp_set_num_threads(num_threads);
-
     // Load input data
     Lab3LoadInput(&A, &n);
 
@@ -81,10 +101,7 @@ int main (){
     GET_TIME(start);
 
     GuassianElimination(A);
-    PrintMat(A, n, n+1); // For debug
     JordanElimination(A);
-    printf("\n\n");
-    PrintMat(A, n, n+1); // For debug
     
     //Take the resulting vector from the reduced matrix
     for (int i = 0; i < n; i++)
@@ -92,8 +109,7 @@ int main (){
     
     GET_TIME(end);
 
-    // Save output
-    Lab3SaveOutput(x, n, end - start);
+    PrintDebug("serial_out.txt", "serial_time_out.txt", end-start, 1);
 
     // Free allocated memory
     DestroyMat(A, n);

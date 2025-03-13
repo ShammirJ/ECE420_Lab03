@@ -1,3 +1,11 @@
+/* IMPORTANT: We have tried to parallelize Gaussian and Jordan elimination before, then we realized that parallel directives nested in the inner loop actually would slow the program down
+ * due to thread creation overhead. Therefore, we decided that it would be best if Gaussian and Jordan elimination be executed in serial and only the updating to x part need to be
+ * parallelized
+ * 
+ * Author: Dang Nguyen, Jose Shammir
+ * Run as: ./main num_thread
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <omp.h>
@@ -5,8 +13,39 @@
 #include "timer.h"
 #include "Lab3IO.h"
 
+#define DEBUG_MODE 0 // Enable/Disable Debug mode. Set this to 1 first to use either the .sh program for testing
+
 double **A, *x;
 int n;
+
+/* Outputing the result and run time to 2 different files. Used for result verification and run time comparision 
+ *
+ * Para: fout -> File name for the output
+ *       tout -> File name for the time measurement
+ *       time -> End time result
+ *       presult -> If 0, don't print the result to save time. Used for run time comparision
+ */
+void PrintDebug(char *fout, char *tout, double time, int presult) {
+    FILE *op, *t;
+    int i;
+
+    if ((op = fopen(fout,"w")) == NULL){
+        printf("Error opening the output file.\n");
+        exit(1);
+    }
+    if ((t = fopen(tout,"a")) == NULL){
+        printf("Error opening the time output file.\n");
+        exit(1);
+    }
+    if (presult) {
+        fprintf(op, "%d\n", n);
+        for (i = 0; i < n; ++i)
+            fprintf(op, "%e\t", x[i]);
+    }
+    fprintf(t, "%lf\n", time);
+    fclose(op);
+    fclose(t);
+}
 
 /* Perform Gaussian Elimination using Algorithm 1 from Lab Manual
  * 
@@ -21,40 +60,30 @@ void GuassianElimination(double **G) {
         int max_row = k;
         double max_val = fabs(G[k][k]);
 
-        #pragma omp parallel
-        {
-            #pragma omp for private(temp)
-            for (int i = k + 1; i < n; i++) {
-                if ((temp = fabs(G[i][k])) > max_val) {
-                    
-                    #pragma omp critical
-                    if (temp > max_val) {
-                        max_val = temp;
-                        max_row = i;
-                    }
-                }
-            }
-
-            if (max_row != k) {
-                
-                // Swap rows
-                #pragma omp for private(temp)
-                for (int j = 0; j < n + 1; j++) {
-                    temp = G[k][j];
-                    G[k][j] = G[max_row][j];
-                    G[max_row][j] = temp;
-                }
-            }
-
-            // Elimination
-            #pragma omp for private(temp)
-            for (int i = k + 1; i < n; i++) {
-                temp = G[i][k] / G[k][k];
-                for (int j = k; j < n + 1; j++) {
-                    G[i][j] -= temp * G[k][j];
-                }
+        for (int i = k + 1; i < n; i++) {
+            if ((temp = fabs(G[i][k])) > max_val) {
+                max_val = temp;
+                max_row = i;
             }
         }
+
+        if (max_row != k) {
+            for (int j = 0; j < n + 1; j++) {
+                temp = G[k][j];
+                G[k][j] = G[max_row][j];
+                G[max_row][j] = temp;
+            }
+        }
+
+        // Elimination
+        #pragma omp for private(temp)
+        for (int i = k + 1; i < n; i++) {
+            temp = G[i][k] / G[k][k];
+            for (int j = k; j < n + 1; j++) {
+                G[i][j] -= temp * G[k][j];
+            }
+        }
+
     }
 }
 
@@ -63,14 +92,10 @@ void GuassianElimination(double **G) {
  * Para: U -> The output matrix from the Gaussian Elimination
  */
 void JordanElimination(double **U) {
-    #pragma omp parallel for schedule(guided)
+    /* Multiple trials and errors show that Jordan elimination is best computed in series */
     for (int k = n - 1; k > 0; k--) {
         for (int i = 0; i < k; i++) {
-            double factor = U[i][k] / U[k][k];
-
-            #pragma omp atomic
-            U[i][n] -= factor * U[k][n];
-
+            U[i][n] -= (U[i][k] / U[k][k]) * U[k][n];
             U[i][k] = 0;
         }
     }
@@ -97,12 +122,9 @@ int main (int argc, char *argv[]){
     GET_TIME(start);
 
     GuassianElimination(A);
-    PrintMat(A, n, n+1); // For debug
     JordanElimination(A);
-    printf("\n\n");
-    PrintMat(A, n, n+1); // For debug
     
-    //Take the resulting vector from the reduced matrix
+    // Take the resulting vector from the reduced matrix
     #pragma omp parallel for
     for (int i = 0; i < n; i++)
         x[i] = A[i][n] / A[i][i];
@@ -111,6 +133,8 @@ int main (int argc, char *argv[]){
 
     // Save output
     Lab3SaveOutput(x, n, end - start);
+
+    if (DEBUG_MODE == 1) PrintDebug("main_out.txt", "main_time_out.txt", end-start, 1);
 
     // Free allocated memory
     DestroyMat(A, n);
