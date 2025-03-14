@@ -107,34 +107,12 @@ void GuassianElimination(double **G) {
  * Para: U -> The output matrix from the Gaussian Elimination
  */
 void JordanElimination(double **U) {
-    int enable_parallel = 0;
-
     #pragma omp parallel
     for (int k = n - 1; k > 0; k--) {
-        #pragma omp single
-        {
-            if ((n-k) >= omp_get_num_threads())
-                enable_parallel = 1;
-            else
-                enable_parallel = 0;
-        }
-
-        /* Only enable parallelism if the number of left over iteration >= number of thread
-         * to reduce overhead
-         */
-        if (enable_parallel) { 
-            #pragma omp for
-            for (int i = 0; i < k; i++) {
-                U[i][n] -= (U[i][k] / U[k][k]) * U[k][n];
-                U[i][k] = 0;
-            }
-        }
-        else {
-            #pragma omp single
-            for (int i = 0; i < k; i++) {
-                U[i][n] -= (U[i][k] / U[k][k]) * U[k][n];
-                U[i][k] = 0;
-            }
+        #pragma omp for
+        for (int i = 0; i < k; i++) {
+            U[i][n] -= (U[i][k] / U[k][k]) * U[k][n];
+            U[i][k] = 0;
         }
     }
 }
